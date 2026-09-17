@@ -1,0 +1,21 @@
+Dockerfile
+  s_dcf38b890a8cb4::t_92b4fd8acca516 19-22,90,92-93
+scripts/start.sh
+  s_dcf38b890a8cb4::t_d542053765e5d2 8-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "662c936e70399f069943256564db393c5e8e8ddf",
+  "prompts": {},
+  "sessions": {
+    "s_dcf38b890a8cb4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0fbae548-4260-4ebb-b6aa-7886504ede1e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Daniil <kindsage@gmail.com>"
+    }
+  }
+}
