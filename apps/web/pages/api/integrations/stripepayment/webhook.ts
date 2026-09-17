@@ -1,11 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+export { default } from "@calcom/app-store/stripepayment/api/webhook";
 
 export const config = {
   api: {
     bodyParser: false,
   },
 };
-
-export default function handler(_req: NextApiRequest, res: NextApiResponse) {
-  res.status(404).json({ message: "Payment webhooks are not available in community edition" });
-}
