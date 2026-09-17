@@ -1,0 +1,14 @@
+Dockerfile
+  h_9efdf1bcd5db0d 19-20,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b02cc21fc59408222ef1ce5b25cead8fa0461df",
+  "prompts": {},
+  "humans": {
+    "h_9efdf1bcd5db0d": {
+      "author": "Daniil <kindsage@gmail.com>"
+    }
+  }
+}
