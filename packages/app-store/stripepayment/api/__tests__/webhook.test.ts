@@ -1,12 +1,10 @@
+import { handlePaymentSuccess } from "@calcom/app-store/_utils/payments/handlePaymentSuccess";
+import prisma from "@calcom/prisma";
 import type { NextApiRequest, NextApiResponse } from "next";
 import getRawBody from "raw-body";
 import Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { handlePaymentSuccess } from "@calcom/app-store/_utils/payments/handlePaymentSuccess";
-import prisma from "@calcom/prisma";
-
-import { getStripeAppKeys } from "../../lib/getStripeAppKeys";
+import getAppKeysFromSlug from "../../../_utils/getAppKeysFromSlug";
 
 const { mockConstructEvent } = vi.hoisted(() => ({ mockConstructEvent: vi.fn() }));
 
@@ -34,14 +32,14 @@ vi.mock("@calcom/app-store/_utils/payments/handlePaymentSuccess", () => ({
   handlePaymentSuccess: vi.fn(),
 }));
 
-vi.mock("../../lib/getStripeAppKeys", () => ({
-  getStripeAppKeys: vi.fn(),
+vi.mock("../../../_utils/getAppKeysFromSlug", () => ({
+  default: vi.fn(),
 }));
 
 const mockGetRawBody = vi.mocked(getRawBody);
 const mockStripeConstructor = vi.mocked(Stripe);
 const mockHandlePaymentSuccess = vi.mocked(handlePaymentSuccess);
-const mockGetStripeAppKeys = vi.mocked(getStripeAppKeys);
+const mockGetAppKeys = vi.mocked(getAppKeysFromSlug);
 // Type the mocked prisma properly
 const mockPrisma = prisma as unknown as {
   payment: {
@@ -93,7 +91,7 @@ describe("stripepayment webhook", () => {
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
 
     mockGetRawBody.mockResolvedValue(Buffer.from('{"id":"evt_1"}'));
-    mockGetStripeAppKeys.mockResolvedValue(appKeys);
+    mockGetAppKeys.mockResolvedValue(appKeys);
     mockHandlePaymentSuccess.mockResolvedValue(undefined);
     mockConstructEvent.mockReturnValue(stripeEvent("customer.created"));
   });
@@ -140,6 +138,7 @@ describe("stripepayment webhook", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ received: true });
     expect(mockPrisma.payment.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.payment.updateMany).not.toHaveBeenCalled();
     expect(mockHandlePaymentSuccess).not.toHaveBeenCalled();
   });
 
@@ -156,7 +155,12 @@ describe("stripepayment webhook", () => {
     });
     expect(mockHandlePaymentSuccess).toHaveBeenCalledTimes(1);
     expect(mockHandlePaymentSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentId: 7, bookingId: 21, appSlug: "stripe" })
+      expect.objectContaining({
+        paymentId: 7,
+        bookingId: 21,
+        appSlug: "stripe",
+        traceContext: expect.anything(),
+      })
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -202,7 +206,7 @@ describe("stripepayment webhook", () => {
 
   it("falls back to env vars when the app keys lack a webhook secret", async () => {
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_from_env");
-    mockGetStripeAppKeys.mockResolvedValue({ ...appKeys, webhook_secret: "" });
+    mockGetAppKeys.mockResolvedValue({ ...appKeys, webhook_secret: "" });
     mockConstructEvent.mockReturnValue(stripeEvent("customer.created"));
 
     const res = createResponse();
@@ -213,8 +217,22 @@ describe("stripepayment webhook", () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
+  it("keeps the app-key field that is present and falls back only for the missing one", async () => {
+    vi.stubEnv("STRIPE_PRIVATE_KEY", "sk_from_env");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_from_env");
+    mockGetAppKeys.mockResolvedValue({ client_id: "ca_only", webhook_secret: "whsec_app" });
+    mockConstructEvent.mockReturnValue(stripeEvent("customer.created"));
+
+    const res = createResponse();
+    await runHandler(createRequest(), res);
+
+    expect(mockStripeConstructor).toHaveBeenCalledWith("sk_from_env", { apiVersion: "2020-08-27" });
+    expect(mockConstructEvent).toHaveBeenCalledWith(expect.any(String), signature, "whsec_app");
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it("returns 500 when no secrets are configured", async () => {
-    mockGetStripeAppKeys.mockRejectedValue(new Error("App keys not found"));
+    mockGetAppKeys.mockResolvedValue({});
 
     const res = createResponse();
     await runHandler(createRequest(), res);
@@ -223,17 +241,28 @@ describe("stripepayment webhook", () => {
     expect(mockConstructEvent).not.toHaveBeenCalled();
   });
 
-  it.each(["payment_intent.payment_failed", "setup_intent.succeeded"])(
-    "acknowledges the ignored event %s",
-    async (type) => {
-      mockConstructEvent.mockReturnValue(stripeEvent(type));
+  it("answers non-2xx when processing fails after a verified signature, so Stripe retries", async () => {
+    mockConstructEvent.mockReturnValue(stripeEvent("payment_intent.succeeded", { id: "pi_123" }));
+    mockPrisma.payment.findFirst.mockResolvedValue({ id: 7, bookingId: 21, success: false });
+    mockHandlePaymentSuccess.mockRejectedValue(new Error("database unavailable"));
 
-      const res = createResponse();
-      await runHandler(createRequest(), res);
+    const res = createResponse();
+    await runHandler(createRequest(), res);
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(mockHandlePaymentSuccess).not.toHaveBeenCalled();
-      expect(mockPrisma.payment.findFirst).not.toHaveBeenCalled();
-    }
-  );
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  it.each([
+    "payment_intent.payment_failed",
+    "setup_intent.succeeded",
+  ])("acknowledges the ignored event %s", async (type) => {
+    mockConstructEvent.mockReturnValue(stripeEvent(type));
+
+    const res = createResponse();
+    await runHandler(createRequest(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockHandlePaymentSuccess).not.toHaveBeenCalled();
+    expect(mockPrisma.payment.findFirst).not.toHaveBeenCalled();
+  });
 });

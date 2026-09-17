@@ -1,16 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import getRawBody from "raw-body";
-import Stripe from "stripe";
-
+import process from "node:process";
 import { handlePaymentSuccess } from "@calcom/app-store/_utils/payments/handlePaymentSuccess";
 import { HttpError as HttpCode } from "@calcom/lib/http-error";
 import logger from "@calcom/lib/logger";
 import { getServerErrorFromUnknown } from "@calcom/lib/server/getServerErrorFromUnknown";
 import { distributedTracing } from "@calcom/lib/tracing/factory";
 import prisma from "@calcom/prisma";
-
+import type { NextApiRequest, NextApiResponse } from "next";
+import getRawBody from "raw-body";
+import Stripe from "stripe";
+import getAppKeysFromSlug from "../../_utils/getAppKeysFromSlug";
 import appConfig from "../_metadata";
-import { getStripeAppKeys } from "../lib/getStripeAppKeys";
 
 export const config = {
   api: {
@@ -20,25 +19,18 @@ export const config = {
 
 const log = logger.getSubLogger({ prefix: ["[stripe-webhook]"] });
 
-type StripeAppKeys = Partial<{
-  client_secret: string;
-  webhook_secret: string;
-}>;
-
 /**
- * App keys are stored in the admin app-store entry, but the community deployment seeds them from
- * STRIPE_PRIVATE_KEY / STRIPE_WEBHOOK_SECRET. Resolve per field so an empty app key still works.
+ * App keys live in the admin app-store entry (App.keys); the community deployment also carries them as
+ * STRIPE_PRIVATE_KEY / STRIPE_WEBHOOK_SECRET in the container env (PaymentService reads the former).
+ * Read the raw JSON rather than the strict parsed schema so that a partially filled entry still lets
+ * each field fall back to its env var on its own.
  */
 async function getStripeKeys(): Promise<{ secretKey?: string; webhookSecret?: string }> {
-  let appKeys: StripeAppKeys = {};
-  try {
-    appKeys = (await getStripeAppKeys()) ?? {};
-  } catch {
-    appKeys = {};
-  }
+  const appKeys = await getAppKeysFromSlug(appConfig.slug);
+  const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
   return {
-    secretKey: appKeys.client_secret || process.env.STRIPE_PRIVATE_KEY,
-    webhookSecret: appKeys.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET,
+    secretKey: str(appKeys.client_secret) || process.env.STRIPE_PRIVATE_KEY,
+    webhookSecret: str(appKeys.webhook_secret) || process.env.STRIPE_WEBHOOK_SECRET,
   };
 }
 
@@ -122,18 +114,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       case "payment_intent.payment_failed":
-        log.info(`Ignoring Stripe event ${event.type}`);
-        return res.status(200).json({ message: "Ignored" });
-
       case "setup_intent.succeeded":
-        // HOLD (card-on-file) payments are not supported by this community patch.
-        log.info(`Ignoring Stripe event ${event.type}`);
+        // Failed intents need no bookkeeping (the booking stays unpaid and expires); HOLD (card-on-file,
+        // setup_intent) payments are not supported by this community patch. Logged above by type.
         return res.status(200).json({ message: "Ignored" });
 
       default:
         return res.status(200).json({ received: true });
     }
   } catch (_err) {
+    // Method/signature/config problems map to 4xx/5xx; a processing failure after a verified signature
+    // also stays non-2xx on purpose: Stripe then retries with backoff (up to 3 days), so a transient
+    // database or e-mail error cannot silently lose a paid booking. Idempotency above makes retries safe.
     const err = getServerErrorFromUnknown(_err);
     log.error(`Stripe webhook error: ${err.message}`);
     return res.status(err.statusCode).json({ message: err.message });
