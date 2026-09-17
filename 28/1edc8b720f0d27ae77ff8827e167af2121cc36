@@ -1,0 +1,19 @@
+Dockerfile
+  s_dcf38b890a8cb4::t_8ea18370e11037 49-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "281edc8b720f0d27ae77ff8827e167af2121cc36",
+  "prompts": {},
+  "sessions": {
+    "s_dcf38b890a8cb4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0fbae548-4260-4ebb-b6aa-7886504ede1e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Daniil <kindsage@gmail.com>"
+    }
+  }
+}
