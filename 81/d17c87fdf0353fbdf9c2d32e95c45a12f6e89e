@@ -1,0 +1,26 @@
+packages/app-store/stripepayment/api/webhook.ts
+  s_58e1d901d84a19::t_28c9ae53daa506 1-141
+apps/web/pages/api/integrations/stripepayment/webhook.ts
+  s_58e1d901d84a19::t_33fe9dd5f86f55 1
+packages/app-store/stripepayment/api/index.ts
+  s_58e1d901d84a19::t_3ff3c82b52d3c7 6
+packages/app-store/stripepayment/api/__tests__/webhook.test.ts
+  s_58e1d901d84a19::t_a52b5b062e9e5f 14-17
+  s_58e1d901d84a19::t_2819c70f7d70cf 1-13,18-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "81d17c87fdf0353fbdf9c2d32e95c45a12f6e89e",
+  "prompts": {},
+  "sessions": {
+    "s_58e1d901d84a19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ses_f5027913bffeuMm30jLdH1kXH5",
+        "model": "unknown"
+      },
+      "human_author": "Daniil <kindsage@gmail.com>"
+    }
+  }
+}
