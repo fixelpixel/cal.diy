@@ -16,8 +16,10 @@ ARG CSP_POLICY
 
 ## We need these variables as required by Next.js build to create rewrites
 ARG NEXT_PUBLIC_SINGLE_ORG_SLUG
-# Stripe publishable key is inlined into the client bundle by Next (turbo.json already lists it as a build env).
-ARG NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+# Stripe publishable key is inlined into the client bundle by Next (turbo.json lists it as a build env).
+# Built with a placeholder and swapped for the runtime value by scripts/start.sh, like NEXT_PUBLIC_WEBAPP_URL,
+# so switching test/live keys needs no rebuild.
+ARG NEXT_PUBLIC_STRIPE_PUBLIC_KEY=pk_NEXT_PUBLIC_STRIPE_PUBLIC_KEY_PLACEHOLDER
 ARG ORGANIZATIONS_ENABLED
 
 ENV NEXT_PUBLIC_WEBAPP_URL=http://NEXT_PUBLIC_WEBAPP_URL_PLACEHOLDER \
@@ -85,8 +87,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends netcat-openbsd 
 
 COPY --from=builder-two /calcom ./
 ARG NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_STRIPE_PUBLIC_KEY=pk_NEXT_PUBLIC_STRIPE_PUBLIC_KEY_PLACEHOLDER
 ENV NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
-  BUILT_NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL
+  BUILT_NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
+  BUILT_NEXT_PUBLIC_STRIPE_PUBLIC_KEY=$NEXT_PUBLIC_STRIPE_PUBLIC_KEY
 
 ENV NODE_ENV=production
 EXPOSE 3000
